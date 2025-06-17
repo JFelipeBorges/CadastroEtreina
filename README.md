@@ -278,13 +278,26 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, collection, query, onSnapshot, addDoc, updateDoc, doc, where, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-        // Variáveis globais fornecidas pelo ambiente Canvas
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // ATENÇÃO: As variáveis __app_id, __firebase_config e __initial_auth_token são fornecidas pelo ambiente Canvas.
+        // Para usar este aplicativo fora do Canvas (ex: GitHub Pages), você precisará fornecer sua própria configuração Firebase.
+        // Substitua os valores abaixo pela sua configuração real do projeto Firebase.
+
+        // Obtenha sua configuração Firebase em: Console do Firebase -> Configurações do Projeto -> Seus aplicativos -> Adicione um aplicativo web
+        const firebaseConfig = {
+            apiKey: "COLE_SUA_API_KEY_AQUI", // Ex: "AIzaSyC..."
+            authDomain: "SEU_PROJETO.firebaseapp.com", // Ex: "meu-projeto-123.firebaseapp.com"
+            projectId: "SEU_PROJECT_ID", // Ex: "meu-projeto-123"
+            storageBucket: "SEU_STORAGE_BUCKET.appspot.com", // Ex: "meu-projeto-123.appspot.com"
+            messagingSenderId: "SEU_MESSAGING_SENDER_ID", // Ex: "1234567890"
+            appId: "SEU_APP_ID" // Ex: "1:234567890:web:abcdef1234567890abcdef"
+        };
+
+        // Use o projectId como appId para o caminho do Firestore, ou defina um manualmente.
+        // Certifique-se de que isso corresponde ao seu path nas regras do Firestore: /artifacts/{appId}/public/data/...
+        const appId = firebaseConfig.projectId; // Recomenda-se usar o Project ID para consistência.
 
         // Elementos UI
         const btnCadastro = document.getElementById('btnCadastro');
@@ -416,12 +429,10 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
 
-                // Autentica o usuário
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                // Para hospedagem externa, usaremos autenticação anônima,
+                // que é suficiente para as regras de segurança padrão (request.auth != null)
+                // e não requer um token de autenticação inicial.
+                await signInAnonymously(auth);
 
                 // Observa mudanças no estado de autenticação
                 onAuthStateChanged(auth, (user) => {
@@ -431,16 +442,20 @@
                         // Inicia o listener de Firestore apenas após a autenticação
                         setupFirestoreListener();
                     } else {
-                        userId = 'anon'; // Fallback para usuário anônimo ou deslogado
-                        currentUserIdSpan.textContent = 'Não Autenticado';
-                        console.warn("Usuário não autenticado. Operações Firestore podem ser restritas.");
+                        // Caso a autenticação anônima falhe ou não esteja pronta, um userId temporário.
+                        // Em um app real, você pode querer forçar um login ou mostrar um erro mais claro.
+                        userId = crypto.randomUUID(); // Gera um ID único aleatório
+                        currentUserIdSpan.textContent = `ID Temporário: ${userId.substring(0, 8)}...`;
+                        console.warn("Usuário não autenticado. Usando ID temporário. Operações Firestore podem ser restritas.");
+                        // Tentar configurar o listener mesmo com ID temporário, mas esteja ciente das regras de segurança.
+                        setupFirestoreListener();
                     }
                     toggleLoading(false);
                 });
 
             } catch (e) {
                 console.error("Erro ao inicializar Firebase ou autenticar:", e);
-                showError("Erro ao iniciar o aplicativo. Por favor, tente novamente.");
+                showError("Erro ao iniciar o aplicativo. Por favor, verifique sua configuração Firebase e tente novamente.");
                 toggleLoading(false);
             }
         }
@@ -451,11 +466,12 @@
          */
         function setupFirestoreListener() {
             if (!db) {
-                console.error("Firestore não inicializado.");
+                console.error("Firestore não inicializado. O listener não pode ser configurado.");
                 return;
             }
 
             // O caminho da coleção é público dentro do appId para colaboração
+            // Certifique-se que o appId aqui corresponde ao 'projectId' ou ao ID que você definiu.
             const collectionPath = `artifacts/${appId}/public/data/resellers`;
             const q = collection(db, collectionPath);
 
